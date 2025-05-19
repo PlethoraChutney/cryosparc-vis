@@ -1,0 +1,41 @@
+[project]
+name = "cryosparc-vis"
+version = "0.1.0"
+description = "Visualize cryoEM datasets produced by CryoSPARC"
+authors = [
+    {name = "Richard Waldo", email = "rich@waldo.town"}
+]
+classifiers = [
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryosparc-tools >= 4.7",
+    "numpy >= 1.17, < 3.0",
+    "matplotlib >= 3.10",
+    "scikit-image >= 0.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "jupyter"
+]
+
+[tool.poetry]
+packages = [
+    {include = "cryosparc_vis", from = "src"}
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
