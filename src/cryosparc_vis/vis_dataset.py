@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from .config import VisConfig
-from .micrograph import UnloadedMicrograph, RawMicrograph, DenoisedMicrograph, JunkAnnotationMicrograph
+from .micrograph import RawMicrograph, DenoisedMicrograph
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -28,6 +28,8 @@ class VisDataset:
     def __init__(self, config:VisConfig) -> None:
         self.cs = config.cs
 
+        self.figsize = config.figsize
+
         self.project_uid = config.project_uid
         self.project = self.cs.find_project(self.project_uid)
 
@@ -38,12 +40,12 @@ class VisDataset:
         self.downsample_size = config.downsample_size
 
         self._base_mic_spec = (None, None)
-        self.base_mic = UnloadedMicrograph("Base")
+        self.base_mic = RawMicrograph(self, None)
         self.base_mic_results = None
         self.base_mic_spec = config.base_mic_info if config.base_mic_info is not None else (None, None)
 
         self._denoised_mic_spec = (None, None)
-        self.denoised_mic = UnloadedMicrograph("Denosied")
+        self.denoised_mic = DenoisedMicrograph(self, None)
         self.denoised_mic_results = None
         self.denoised_mic_spec = config.denoised_mic_info if config.denoised_mic_info else (None, None)
 
@@ -80,7 +82,6 @@ class VisDataset:
 
         self.load_micrographs()
         
-        
 
     def select_mic_index(self, midx:str|int) -> int:
         if self.base_mic_results is None:
@@ -95,18 +96,14 @@ class VisDataset:
         
         if self.base_mic_results is not None and "base" in mic_load_list:
             self.base_mic = RawMicrograph(
-                self.project,
+                self,
                 self.base_mic_results.query({"uid": self.mic_uid})[0],
-                self.downsample_size,
-                self.download_mic
             )
 
         if self.denoised_mic_results is not None and "denoised" in mic_load_list:
             self.denoised_mic = DenoisedMicrograph(
-                self.project,
+                self,
                 self.denoised_mic_results.query({"uid": self.mic_uid})[0],
-                self.downsample_size,
-                self.download_mic
             )
 
     # mic spec getters and setters
