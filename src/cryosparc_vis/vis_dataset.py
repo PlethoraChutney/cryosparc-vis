@@ -6,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from .config import VisConfig
 from .micrograph import RawMicrograph, DenoisedMicrograph, JunkAnnotations
+from .particles import Particles
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -65,7 +66,10 @@ class VisDataset:
         elif config.mic_index is not None:
             self.select_mic_index(config.mic_index)
 
-        self.all_mics = [self.base_mic]
+        # particles
+
+        self._particles:Particles = Particles(self)
+        self.particles_spec = config.particles_spec
 
     # ===========================
     #           CONFIG
@@ -82,7 +86,8 @@ class VisDataset:
             mic_uid = self.mic_uid,
             downsample_size = self.downsample_size,
             crop_slice = None,
-            download_mic = self.download_mic
+            download_mic = self.download_mic,
+            particles_spec = self.particles_spec
         )
     
     def copy(self, updates:dict[str,Any] = {}) -> "VisDataset":
@@ -153,12 +158,16 @@ class VisDataset:
             raise AttributeError("Select a base micrograph job before setting the micrograph UID")
         if muid is None:
             self._mic_uid = None
-            self.base_mic = UnloadedMicrograph("Base")
+            self.base_mic = RawMicrograph(self, None)
             return
         
         self._mic_uid = int(muid)
 
         self.load_micrographs()
+        try:
+            self.particles.update_mic_uid_filter()
+        except AttributeError:
+            pass
         
 
     def select_mic_index(self, midx:str|int) -> int:
@@ -272,3 +281,32 @@ class VisDataset:
         self.junk_annotations_results = self.project.find_job(job_uid).load_output(title)
         if self.mic_uid is not None:
             self.load_micrographs(["junk"])
+
+    # ===========================
+    #          PARTICLES
+    # ===========================
+
+    @property
+    def particles_spec(self) -> tuple[str|None, str|None]:
+        try:
+            return self._particles_spec
+        except AttributeError:
+            return (None, None)
+    
+    @particles_spec.setter
+    def particles_spec(self, new_spec:None|tuple[str|None, str|None]) -> None:
+        if new_spec is None:
+            new_spec = (None, None)
+        self._particles_spec = new_spec
+        self.particles_job = None if new_spec[0] is None else self.project.find_job(new_spec[0])
+        self.particles = Particles(self)
+
+    @property
+    def particles(self) -> Particles:
+        return self._particles
+    
+    @particles.setter
+    def particles(self, new_particles) -> None:
+        if not isinstance(new_particles, Particles):
+            raise ValueError("New particles must be a Particles object. Use particles_spec to replace it.")
+        self._particles = new_particles

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from cryosparc.tools import CryoSPARC
+from typing import Optional
 
 @dataclass
 class VisConfig:
@@ -49,21 +50,20 @@ class VisConfig:
     cs:CryoSPARC
     project_uid:str
     
-    base_mic_spec:tuple[str|None, str|None]|None = None
-    denoised_mic_spec:tuple[str|None, str|None]|None = None
-    junk_annotation_spec:tuple[str|None, str|None]|None = None
-    mic_uid:None|int = None
-    mic_index:None|int = None
-    downsample_size:None|int = None
+    base_mic_spec:Optional[tuple[str|None, str|None]] = None
+    denoised_mic_spec:Optional[tuple[str|None, str|None]] = None
+    junk_annotation_spec:Optional[tuple[str|None, str|None]] = None
+    mic_uid:Optional[int] = None
+    mic_index:Optional[int] = None
+    downsample_size:Optional[int] = None
     crop_slice:None|tuple[float|None, float|None, float|None, float|None] = None
-    download_mic:bool = True
+    download_mic:Optional[bool] = True
 
-    particles_juid:None|str = None
-    particles_title:str = "particles"
-    iteration:str|int = "F"
+    particles_spec:Optional[tuple[str|None, str|None]] = None
+    iteration:Optional[str|int] = "F"
 
-    figsize:tuple = (8, 8)
-    mic_lp_filter_res:float = 20.0
+    figsize:Optional[tuple] = (8, 8)
+    mic_lp_filter_res:Optional[float] = 20.0
 
     # 2D Classification / Selection
     class_av_title:None|str = None
