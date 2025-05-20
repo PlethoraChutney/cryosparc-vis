@@ -3,6 +3,7 @@ from skimage.transform import resize
 from cryosparc.tools import lowpass2
 import tempfile
 import matplotlib as mpl
+import matplotlib.colors
 import matplotlib.pyplot as plt
 from typing import TYPE_CHECKING, Optional, Any
 from cryosparc.row import Row
@@ -32,6 +33,20 @@ class MicrographBase:
         self.blob_field:str|None = None
         self.apix_field:str|None = None
         self.full_image:"NDArray[np.float64]|None" = None
+        self.anti_alias_resize = True
+        self.mic_type = "Base"
+
+        self.plot_defaults:dict[str,Any] = {
+            "cmap": "Greys_r",
+            "origin": "lower",
+            "interpolation": "nearest"
+        }
+
+    def __repr__(self) -> str:
+        if self._micrograph_row is None:
+            return f"Unloaded {self.mic_type} micrograph"
+        else:
+            return f"{self.parent.project_uid} {self.mic_type} micrograph UID {self.parent.mic_uid}"
 
     @property
     def micrograph_row(self) -> "Row":
@@ -51,9 +66,12 @@ class MicrographBase:
         return self.micrograph_row[self.apix_field] # type: ignore
 
     def load_mic(self):
-        blob_path = self.micrograph_row[self.blob_field] # type: ignore
+        try:
+            blob_path = self.micrograph_row[self.blob_field] # type: ignore
+        except AttributeError:
+            return
         self.hdr, self.full_image = self.project.download_mrc(self.project.dir() / blob_path) # type: ignore
-        self.full_image = np.squeeze(self.full_image)
+        self.image = np.squeeze(self.full_image)
 
     @property
     def image(self) -> "NDArray[np.float64]":
@@ -61,11 +79,8 @@ class MicrographBase:
             im = self.full_image.copy()
         else:
             raise AttributeError("Micrograph is not loaded")
-
-        if self.parent.downsample_size is None:
-            return im
         
-        return resize(im, self.shape)
+        return resize(im, self.shape, anti_aliasing = self.anti_alias_resize, order = 1 if self.anti_alias_resize else 0)
     
     def lp_image(self, lowpass_cutoff:float = 20.0, order:int = 6) -> "NDArray":
         return lowpass2(self.image, self.apix * self.scaling_factor, lowpass_cutoff, order) # type: ignore
@@ -74,15 +89,11 @@ class MicrographBase:
     def image(self, im:"NDArray") -> None:
         if not isinstance(im, np.ndarray):
             raise ValueError("Image must be a numpy array")
-        self._image = np.squeeze(im)
+        self.full_image = np.squeeze(im)
 
     @property
     def shape(self) -> "NDArray":
-        s = self.full_image.shape if self.full_image is not None else self.micrograph_row[self.shape_field] # type: ignore
-
-        if self.parent.downsample_size is None:
-            return np.array(s)
-        
+        s = self.full_image.shape if self.full_image is not None else self.micrograph_row[self.shape_field] # type: ignore        
         aspect_ratio = np.array(s) / np.max(s)
         downsampled_shape = (np.array([self.parent.downsample_size]*2) * aspect_ratio).astype(int)
         return downsampled_shape
@@ -122,12 +133,7 @@ class MicrographBase:
             kwargs["vmin"] = np.min(p)
             kwargs["vmax"] = np.max(p)
 
-
-        defaults:dict[str,Any] = {
-            "cmap": "Greys_r",
-            "origin": "lower",
-            "interpolation": "nearest"
-        }
+        defaults = self.plot_defaults.copy()
         defaults.update(kwargs)
 
         ax.imshow(
@@ -151,6 +157,7 @@ class RawMicrograph(MicrographBase):
         self.blob_field = "micrograph_blob/path"
         self.shape_field = "micrograph_blob/shape"
         self.apix_field = "micrograph_blob/psize_A"
+        self.mic_type = "Raw"
         if self.parent.download_mic:
             try:
                 self.load_mic()
@@ -168,6 +175,7 @@ class DenoisedMicrograph(MicrographBase):
         self.blob_field = "micrograph_blob_denoised/path"
         self.shape_field = "micrograph_blob_denoised/shape"
         self.apix_field = "micrograph_blob_denoised/psize_A"
+        self.mic_type = "Denoised"
         if self.parent.download_mic:
             try:
                 self.load_mic()
@@ -175,4 +183,49 @@ class DenoisedMicrograph(MicrographBase):
                 pass
 
 
-    
+class JunkAnnotations(MicrographBase):
+    def __init__(
+        self,
+        parent: "VisDataset",
+        micrograph_row:"Row|None"
+    ) -> None:
+        
+        super().__init__(parent, micrograph_row)
+        self.blob_field = "annotation_blob/path"
+        self.shape_field = "annotation_blob/shape"
+        self.apix_field = "annotation_blob/psize_A"
+        self.mic_type = "Junk Annotations"
+        self.anti_alias_resize = False
+        self.plot_defaults.update({
+            "alpha": 0.4,
+            "cmap": self.annotation_cmap,
+            "vmin": 0,
+            "vmax": 5
+        })
+        if self.parent.download_mic:
+            try:
+                self.load_mic()
+            except AttributeError:
+                pass
+
+    annotation_cmap = matplotlib.colors.ListedColormap(
+        colors = [
+            [1.0, 1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0, 1.0]
+        ],
+        name = "cs_junk",
+    )
+        
+    def load_mic(self) -> None:
+        try:
+            blob_path = self.micrograph_row["annotation_blob/path"]
+        except AttributeError:
+            self.mic_annotations = None
+            return
+        
+        with tempfile.NamedTemporaryFile(suffix = ".npy") as tmp:
+            self.parent.project.download_file(blob_path, tmp)
+            self.image = np.squeeze(np.load(tmp.name))

@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from .config import VisConfig
-from .micrograph import RawMicrograph, DenoisedMicrograph
+from .micrograph import RawMicrograph, DenoisedMicrograph, JunkAnnotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -37,17 +37,23 @@ class VisDataset:
 
         self._mic_uid = None
         self.download_mic = config.download_mic
+        self._downsample_size = None
         self.downsample_size = config.downsample_size
 
         self._base_mic_spec = (None, None)
         self.base_mic = RawMicrograph(self, None)
         self.base_mic_results = None
-        self.base_mic_spec = config.base_mic_info if config.base_mic_info is not None else (None, None)
+        self.base_mic_spec = config.base_mic_spec if config.base_mic_spec is not None else (None, None)
 
         self._denoised_mic_spec = (None, None)
         self.denoised_mic = DenoisedMicrograph(self, None)
         self.denoised_mic_results = None
-        self.denoised_mic_spec = config.denoised_mic_info if config.denoised_mic_info else (None, None)
+        self.denoised_mic_spec = config.denoised_mic_spec if config.denoised_mic_spec else (None, None)
+
+        self._junk_annotation_spec = (None, None)
+        self.junk_annotations = JunkAnnotations(self, None)
+        self.junk_annotations_results = None
+        self.junk_annotation_spec = config.junk_annotation_spec if config.junk_annotation_spec else (None, None)
 
 
         if config.mic_uid is not None:
@@ -62,6 +68,26 @@ class VisDataset:
     # ===========================
     #         MICROGRAPHS
     # ===========================
+
+    @property
+    def downsample_size(self) -> int:
+        if isinstance(self._downsample_size, int):
+            return self._downsample_size
+        elif self.base_mic.full_image is not None:
+            return np.max(self.base_mic.full_image.shape)
+
+        raise AttributeError("No downsample size set and base micrograph not loaded.")
+        
+    @downsample_size.setter
+    def downsample_size(self, size:int|None) -> None:
+        if size is None:
+            self._downsample_size = None
+        elif isinstance(size, int):
+            self._downsample_size = size
+        else:
+            raise ValueError("Downsample size must be int or None")
+
+
 
     # mic selection
 
@@ -106,6 +132,12 @@ class VisDataset:
                 self.denoised_mic_results.query({"uid": self.mic_uid})[0],
             )
 
+        if self.junk_annotations_results is not None and "junk" in mic_load_list:
+            self.junk_annotations = JunkAnnotations(
+                self,
+                self.junk_annotations_results.query({"uid": self.mic_uid})[0],
+            )
+
     # mic spec getters and setters
 
     @property
@@ -121,7 +153,7 @@ class VisDataset:
         job_uid, title = mic_spec
         
         if job_uid is None:
-            self.base_mic = UnloadedMicrograph("Base")
+            self.base_mic = RawMicrograph(self, None)
             self.base_mic_results = None
             return
         
@@ -146,7 +178,7 @@ class VisDataset:
         job_uid, title = mic_spec
 
         if job_uid is None:
-            self.denoised_mic = UnloadedMicrograph("Denoised")
+            self.denoised_mic = DenoisedMicrograph(self, None)
             self.denoised_mic_results = None
             return
         
@@ -161,3 +193,30 @@ class VisDataset:
         if self.mic_uid is not None:
             self.load_micrographs(["denoised"])
 
+    @property
+    def junk_annotation_spec(self) -> tuple[str|None, str|None]:
+        return self._junk_annotation_spec
+    
+    @junk_annotation_spec.setter
+    def junk_annotation_spec(self, junk_spec:tuple[str|None, str|None]) -> None:
+        if not isinstance(junk_spec, tuple):
+            raise ValueError("Micrograph spec must be a tuple")
+        
+        self._denoised_mic_spec = junk_spec
+        job_uid, title = junk_spec
+
+        if job_uid is None:
+            self.denoised_mic = DenoisedMicrograph(self, None)
+            self.denoised_mic_results = None
+            return
+        
+        if title is None:
+            if self.base_mic_spec[1] is None:
+                raise ValueError("Specify a base or denoised micrograph title")
+            else:
+                print("INFO: Using base mic title for denoised mics")
+                title = self.base_mic_spec[1]
+        
+        self.junk_annotations_results = self.project.find_job(job_uid).load_output(title)
+        if self.mic_uid is not None:
+            self.load_micrographs(["junk"])

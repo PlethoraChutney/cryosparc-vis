@@ -49,9 +49,9 @@ class VisConfig:
     cs:CryoSPARC
     project_uid:str
     
-    base_mic_info:tuple[str, str]|None = None
-    denoised_mic_info:tuple[str, str]|None = None
-    junk_annotation_mic_info:tuple[str, str]|None = None
+    base_mic_spec:tuple[str, str]|None = None
+    denoised_mic_spec:tuple[str, str]|None = None
+    junk_annotation_spec:tuple[str, str]|None = None
     mic_uid:None|int = None
     mic_index:None|int = None
     downsample_size:None|int = None
