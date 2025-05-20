@@ -26,50 +26,141 @@ class VisDataset:
     """
 
     def __init__(self, config:VisConfig) -> None:
-        self.config = config
         self.cs = config.cs
 
         self.project_uid = config.project_uid
         self.project = self.cs.find_project(self.project_uid)
 
-        self.download_mic = config.download_mic
-        self.base_mic_juid, self.base_mic_title = config.base_mic if config.base_mic is not None else (None, None)
-        self.base_mic = UnloadedMicrograph("Base")
-        self.denoised_mic_juid, self.denoised_mic_title = config.denoised_mic if config.denoised_mic is not None else (None, None)
-        self.denoised_mic = UnloadedMicrograph("Denoised")
-        self.junk_annotation_juid, self.junk_annotation_title = config.junk_annotation_mic if config.junk_annotation_mic is not None else (None, None)
-        self.junk_annotation_mic = UnloadedMicrograph("Junk Annotations")
-        self.mic_uid = config.mic_uid
-        self.mic_index = config.mic_index
-        self.downsample_size = config.downsample_size
-        
-        self.load_mics()
+        # micrographs
 
-    def load_mics(self) -> None:
-        if all(x is None for x in [self.base_mic_juid, self.denoised_mic_juid, self.junk_annotation_juid]):
+        self._mic_uid = None
+        self.download_mic = config.download_mic
+        self.downsample_size = config.downsample_size
+
+        self._base_mic_spec = (None, None)
+        self.base_mic = UnloadedMicrograph("Base")
+        self.base_mic_results = None
+        self.base_mic_spec = config.base_mic_info if config.base_mic_info is not None else (None, None)
+
+        self._denoised_mic_spec = (None, None)
+        self.denoised_mic = UnloadedMicrograph("Denosied")
+        self.denoised_mic_results = None
+        self.denoised_mic_spec = config.denoised_mic_info if config.denoised_mic_info else (None, None)
+
+
+        if config.mic_uid is not None:
+            self.mic_uid = config.mic_uid
+            if config.mic_index is not None:
+                print("WARNING: Ignoring mic index because mic UID was provided")
+        elif config.mic_index is not None:
+            self.select_mic_index(config.mic_index)
+
+        self.all_mics = [self.base_mic]
+
+    # ===========================
+    #         MICROGRAPHS
+    # ===========================
+
+    # mic selection
+
+    @property
+    def mic_uid(self) -> int | None:
+        return self._mic_uid
+    
+    @mic_uid.setter
+    def mic_uid(self, muid:int|str|None) -> None:
+        if self.base_mic_results is None:
+            raise AttributeError("Select a base micrograph job before setting the micrograph UID")
+        if muid is None:
+            self._mic_uid = None
+            self.base_mic = UnloadedMicrograph("Base")
             return
         
-        if self.base_mic_juid is None or self.base_mic_title is None:
-            raise AttributeError("If loading micrographs, must specify base mic JUID")
-        
-        base_job = self.project.find_job(self.base_mic_juid)
-        base_mic_info = base_job.load_output(self.base_mic_title)
+        self._mic_uid = int(muid)
 
+        self.load_micrographs()
+        
+        
+
+    def select_mic_index(self, midx:str|int) -> int:
+        if self.base_mic_results is None:
+            raise AttributeError("Must load base micrographs to select by index")
+        mic_uid = self.base_mic_results[int(midx)]["uid"]
+        self.mic_uid = mic_uid
+        return mic_uid
+    
+    def load_micrographs(self, mic_load_list:list[str] = ["base", "denoised", "junk"]) -> None:
+        if self.mic_uid is None:
+            return
+        
+        if self.base_mic_results is not None and "base" in mic_load_list:
+            self.base_mic = RawMicrograph(
+                self.project,
+                self.base_mic_results.query({"uid": self.mic_uid})[0],
+                self.downsample_size,
+                self.download_mic
+            )
+
+        if self.denoised_mic_results is not None and "denoised" in mic_load_list:
+            self.denoised_mic = DenoisedMicrograph(
+                self.project,
+                self.denoised_mic_results.query({"uid": self.mic_uid})[0],
+                self.downsample_size,
+                self.download_mic
+            )
+
+    # mic spec getters and setters
+
+    @property
+    def base_mic_spec(self) -> tuple[str|None, str|None]:
+        return self._base_mic_spec
+    
+    @base_mic_spec.setter
+    def base_mic_spec(self, mic_spec:tuple[str|None, str|None]) -> None:
+        if not isinstance(mic_spec, tuple):
+            raise ValueError("Micrograph spec must be a tuple")
+        
+        self._base_mic_spec = mic_spec
+        job_uid, title = mic_spec
+        
+        if job_uid is None:
+            self.base_mic = UnloadedMicrograph("Base")
+            self.base_mic_results = None
+            return
+        
+        if title is None:
+            raise ValueError("If loading micrographs, specify the result title")
+        
+        self.base_mic_results = self.project.find_job(job_uid).load_output(title)
         if self.mic_uid is not None:
-            if self.mic_uid not in base_mic_info["uid"]:
-                raise ValueError("UID not in base micrograph dataset")
-            base_mic_info = base_mic_info.query({"uid": self.mic_uid})[0]
-        else:
-            if self.mic_index is None:
-                raise AttributeError("Specify micrograph UID or index")
-            base_mic_info = base_mic_info[self.mic_index]
-            self.mic_uid = int(base_mic_info["uid"])
-        
-        self.base_mic = RawMicrograph(self.project, base_mic_info, self.downsample_size, self.download_mic)
+            self.load_micrographs(["base"])
 
-        if self.denoised_mic_juid is not None:
-            denoised_job = self.project.find_job(self.denoised_mic_juid)
 
-            denoised_mic_info = denoised_job.load_output(self.denoised_mic_title).query({"uid": self.mic_uid})[0] #type: ignore
-            self.denoised_mic = DenoisedMicrograph(self.project, denoised_mic_info, self.downsample_size, self.download_mic)
+    @property
+    def denoised_mic_spec(self) -> tuple[str|None, str|None]:
+        return self._denoised_mic_spec
+    
+    @denoised_mic_spec.setter
+    def denoised_mic_spec(self, mic_spec:tuple[str|None, str|None]) -> None:
+        if not isinstance(mic_spec, tuple):
+            raise ValueError("Micrograph spec must be a tuple")
         
+        self._denoised_mic_spec = mic_spec
+        job_uid, title = mic_spec
+
+        if job_uid is None:
+            self.denoised_mic = UnloadedMicrograph("Denoised")
+            self.denoised_mic_results = None
+            return
+        
+        if title is None:
+            if self.base_mic_spec[1] is None:
+                raise ValueError("Specify a base or denoised micrograph title")
+            else:
+                print("INFO: Using base mic title for denoised mics")
+                title = self.base_mic_spec[1]
+        
+        self.denoised_mic_results = self.project.find_job(job_uid).load_output(title)
+        if self.mic_uid is not None:
+            self.load_micrographs(["denoised"])
+
