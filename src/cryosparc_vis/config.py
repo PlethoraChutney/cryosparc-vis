@@ -49,9 +49,9 @@ class VisConfig:
     cs:CryoSPARC
     project_uid:str
     
-    base_mic_spec:tuple[str, str]|None = None
-    denoised_mic_spec:tuple[str, str]|None = None
-    junk_annotation_spec:tuple[str, str]|None = None
+    base_mic_spec:tuple[str|None, str|None]|None = None
+    denoised_mic_spec:tuple[str|None, str|None]|None = None
+    junk_annotation_spec:tuple[str|None, str|None]|None = None
     mic_uid:None|int = None
     mic_index:None|int = None
     downsample_size:None|int = None
@@ -70,7 +70,11 @@ class VisConfig:
     class_selection:None|list = None
     class_av_version:None|str|int = None
 
-    def copy(self, updates:dict = {}):
+    def copy(self, updates:dict = {}) -> "VisConfig":
         copy_dict = self.__dict__
         copy_dict.update(updates)
         return VisConfig(**copy_dict)
+    
+    def update(self, updates:dict) -> None:
+        for k, v in updates.items():
+            self.__setattr__(k, v)

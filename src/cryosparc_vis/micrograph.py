@@ -2,14 +2,12 @@ import numpy as np
 from skimage.transform import resize
 from cryosparc.tools import lowpass2
 import tempfile
-import matplotlib as mpl
 import matplotlib.colors
 import matplotlib.pyplot as plt
 from typing import TYPE_CHECKING, Optional, Any
 from cryosparc.row import Row
 
 if TYPE_CHECKING:
-    from cryosparc.project import Project
     from numpy.typing import NDArray
     import matplotlib.axes
     import matplotlib.figure

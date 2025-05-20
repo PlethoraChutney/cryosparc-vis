@@ -6,7 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from .config import VisConfig
 from .micrograph import RawMicrograph, DenoisedMicrograph, JunkAnnotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import cryosparc.dataset
@@ -64,6 +64,29 @@ class VisDataset:
             self.select_mic_index(config.mic_index)
 
         self.all_mics = [self.base_mic]
+
+    # ===========================
+    #           CONFIG
+    # ===========================
+
+    @property
+    def config(self) -> VisConfig:
+        return VisConfig(
+            cs = self.cs,
+            project_uid = self.project_uid,
+            base_mic_spec = self.base_mic_spec,
+            denoised_mic_spec = self.denoised_mic_spec,
+            junk_annotation_spec = self.junk_annotation_spec,
+            mic_uid = self.mic_uid,
+            downsample_size = self.downsample_size,
+            crop_slice = None,
+            download_mic = self.download_mic
+        )
+    
+    def copy(self, updates:dict[str,Any] = {}) -> "VisDataset":
+        config = self.config
+        config.update(updates)
+        return VisDataset(config)
 
     # ===========================
     #         MICROGRAPHS
