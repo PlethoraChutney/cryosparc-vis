@@ -55,7 +55,7 @@ class VisConfig:
     mic_uid:None|int = None
     mic_index:None|int = None
     downsample_size:None|int = None
-    crop_slice:None|list = None
+    crop_slice:None|tuple[float|None, float|None, float|None, float|None] = None
     download_mic:bool = True
 
     particles_juid:None|str = None

@@ -40,6 +40,8 @@ class VisDataset:
         self._downsample_size = None
         self.downsample_size = config.downsample_size
 
+        self.crop_slice = config.crop_slice
+
         self._base_mic_spec = (None, None)
         self.base_mic = RawMicrograph(self, None)
         self.base_mic_results = None
@@ -92,6 +94,8 @@ class VisDataset:
     #         MICROGRAPHS
     # ===========================
 
+    # downsample and crop
+
     @property
     def downsample_size(self) -> int:
         if isinstance(self._downsample_size, int):
@@ -110,6 +114,31 @@ class VisDataset:
         else:
             raise ValueError("Downsample size must be int or None")
 
+    @property
+    def crop_slice(self) -> tuple[float, float, float, float]:
+        if self._crop_slice is None:
+            return (0., 1., 0., 1.)
+        xs, xe, ys, ye = self._crop_slice
+        proper_slice = (
+            0. if xs is None else xs,
+            1. if xe is None else xe,
+            0. if ys is None else ys,
+            1. if ye is None else ye
+        )
+        return proper_slice
+    
+    @crop_slice.setter
+    def crop_slice(self, new_slice: None | tuple[float|None, float|None, float|None, float|None] | list[float|None]) -> None:
+        if new_slice is None:
+            self._crop_slice = None
+            return
+        if not all(x is None or isinstance(x, (float, int)) for x in new_slice) or len(new_slice) != 4:
+            raise ValueError("Slice must be None, or four values, each a float or None")
+        if all(x is not None for x in new_slice[:2]) and new_slice[0] > new_slice[1]: # type: ignore
+            raise ValueError("First slice component must be less than second slice component")
+        if all(x is not None for x in new_slice[2:]) and new_slice[2] > new_slice[3]: # type: ignore
+            raise ValueError("Third slice component must be less than fourth slice component")
+        self._crop_slice = new_slice
 
 
     # mic selection

@@ -78,7 +78,17 @@ class MicrographBase:
         else:
             raise AttributeError("Micrograph is not loaded")
         
-        return resize(im, self.shape, anti_aliasing = self.anti_alias_resize, order = 1 if self.anti_alias_resize else 0)
+        im = resize(im, self.shape, anti_aliasing = self.anti_alias_resize, order = 1 if self.anti_alias_resize else 0)
+
+        s = im.shape
+        xs, xe, ys, ye = self.parent.crop_slice
+        c = [
+            int(ys * s[1]),
+            int(-1 + ye * s[1]),
+            int(xs * s[0]),
+            int(-1 + xe * s[0]),
+        ]
+        return im[c[0]:c[1], c[2]:c[3]]
     
     def lp_image(self, lowpass_cutoff:float = 20.0, order:int = 6) -> "NDArray":
         return lowpass2(self.image, self.apix * self.scaling_factor, lowpass_cutoff, order) # type: ignore
@@ -112,7 +122,7 @@ class MicrographBase:
             percentile:Optional[float] = None,
             lowpass:Optional[float] = None,
             **kwargs
-            ) -> None | tuple["matplotlib.figure.Figure", "matplotlib.axes.Axes"]:
+            ) -> tuple["matplotlib.figure.Figure", "matplotlib.axes.Axes"]:
         
         if ax is None:
             fig, ax = plt.subplots(
@@ -123,7 +133,7 @@ class MicrographBase:
                 figsize = figsize if figsize else self.parent.figsize
             )
         else:
-            fig = None
+            fig = ax.get_figure()
 
         im = self.image if lowpass is None else self.lp_image(lowpass)
         if percentile is not None:
@@ -142,7 +152,7 @@ class MicrographBase:
         ax.axis("off")
         ax.set_aspect("equal")
 
-        return (fig, ax) if fig is not None else None
+        return (fig, ax) # type: ignore
 
 class RawMicrograph(MicrographBase):
     def __init__(
