@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from cryosparc.tools import CryoSPARC
-from typing import Optional
+from typing import Optional, Literal
 
 @dataclass
 class VisConfig:
@@ -47,7 +47,7 @@ class VisConfig:
     """
 
     # base
-    cs:CryoSPARC
+    cs:CryoSPARC|str
     project_uid:str
     
     base_mic_spec:Optional[tuple[str|None, str|None]] = None
@@ -60,7 +60,7 @@ class VisConfig:
     download_mic:Optional[bool] = True
 
     particles_spec:Optional[tuple[str|None, str|None]] = None
-    iteration:Optional[str|int] = "F"
+    iteration:Optional[int|Literal["F"]] = "F"
 
     figsize:Optional[tuple] = (8, 8)
     mic_lp_filter_res:Optional[float] = 20.0

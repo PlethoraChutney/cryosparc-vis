@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Literal
 from cryosparc.dataset import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,7 +26,7 @@ class Particles:
             self.particles = None
         else:
             self.job = self.parent.project.find_job(spec[0])
-            self.particles = self.job.load_output("particles" if spec[1] is None else spec[1])
+            self.particles = self.job.load_output("particles" if spec[1] is None else spec[1], version = self.parent.iteration)
 
     def remove_mask(self, mask_name:str) -> None:
         if mask_name in self.bool_masks:
@@ -73,6 +73,19 @@ class Particles:
     
     def fields_prefix(self, prefix:str) -> list[str]:
         return list(f for f in self.fields if f.startswith(prefix))
+    
+    # dataset passthrough
+
+    def __getitem__(self, key):
+        return self.particles[key]
+    
+    def __setitem__(self, key, value):
+        raise ValueError("Assigning to masked particles is not permitted")
+    
+    def __delitem__(self, key):
+        self.unmasked_particles.drop_fields(key)
+    
+
 
     # plotting
 
@@ -98,9 +111,9 @@ class Particles:
         ax:Optional["matplotlib.axes.Axes"] = None,
         figsize:Optional[tuple[float, float]] = None,
         color_by:Optional[str] = None,
-        legend:Optional[bool] = True,
+        legend:None | Literal["colorbar"] | Literal["legend"] = "colorbar",
         **kwargs,
-    ) -> tuple["matplotlib.figure.Figure", "matplotlib.axes.Axes"]:
+    ) -> tuple["matplotlib.figure.Figure | None", "matplotlib.axes.Axes"]:
         if ax is None:
             fig, ax = plt.subplots(
                 1,
@@ -113,6 +126,7 @@ class Particles:
             fig = ax.get_figure()
 
         defaults = self.__class__.plot_defaults.copy()
+        defaults["c"] = self.particles[color_by] if color_by is not None else None
         defaults.update(**kwargs)
 
         if color_by is not None:
@@ -121,18 +135,22 @@ class Particles:
         scatter = ax.scatter(
             self.particles_x,
             self.particles_y,
-            c = self.particles[color_by] if color_by is not None else None,
             **defaults
         )
-        if color_by is not None and legend:
-            fig.colorbar(scatter, ax = ax, location = "right") # type: ignore
+        if color_by is not None and fig is not None:
+            if legend == "colorbar":
+                fig.colorbar(scatter, ax = ax, location = "right")
+            elif legend == "legend":
+                ax.add_artist(
+                    ax.legend(*scatter.legend_elements(), loc = "top right", title = color_by)
+                )
         ax.set_aspect("equal")
         ax.axis("off")
         ax.margins(0)
 
         
         
-        return fig, ax # type: ignore
+        return fig, ax
         
 
 

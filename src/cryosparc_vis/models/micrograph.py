@@ -28,11 +28,11 @@ class MicrographBase:
         self.project = parent.project
         self._micrograph_row = None
         self.micrograph_row = micrograph_row
-        self.blob_field:str|None = None
-        self.apix_field:str|None = None
+        self.blob_field:str = None # type: ignore
+        self.apix_field:str = None # type: ignore
         self.full_image:"NDArray[np.float64]|None" = None
         self.anti_alias_resize = True
-        self.mic_type = "Base"
+        self.mic_type:str = "Base"
 
         self.plot_defaults:dict[str,Any] = {
             "cmap": "Greys_r",
@@ -61,14 +61,11 @@ class MicrographBase:
         
     @property
     def apix(self) -> float:
-        return self.micrograph_row[self.apix_field] # type: ignore
+        return self.micrograph_row[self.apix_field]
 
     def load_mic(self):
-        try:
-            blob_path = self.micrograph_row[self.blob_field] # type: ignore
-        except AttributeError:
-            return
-        self.hdr, self.full_image = self.project.download_mrc(self.project.dir() / blob_path) # type: ignore
+        blob_path = self.micrograph_row[self.blob_field]
+        self.hdr, self.full_image = self.project.download_mrc(self.project.dir() / blob_path)
         self.image = np.squeeze(self.full_image)
 
     @property
@@ -130,7 +127,7 @@ class MicrographBase:
             percentile:Optional[float] = None,
             lowpass:Optional[float] = None,
             **kwargs
-            ) -> tuple["matplotlib.figure.Figure", "matplotlib.axes.Axes"]:
+            ) -> tuple["matplotlib.figure.Figure | None", "matplotlib.axes.Axes"]:
         
         if ax is None:
             fig, ax = plt.subplots(
@@ -160,7 +157,7 @@ class MicrographBase:
         ax.axis("off")
         ax.set_aspect("equal")
 
-        return (fig, ax) # type: ignore
+        return fig, ax
 
 class RawMicrograph(MicrographBase):
     def __init__(

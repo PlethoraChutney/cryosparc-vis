@@ -1,8 +1,11 @@
+import json
+from pathlib import Path
 import numpy as np
+from cryosparc.tools import CryoSPARC
 from .config import VisConfig
 from .micrograph import RawMicrograph, DenoisedMicrograph, JunkAnnotations
 from .particles import Particles
-from typing import Any
+from typing import Any, Literal
 
 
 class VisDataset:
@@ -19,7 +22,13 @@ class VisDataset:
     """
 
     def __init__(self, config:VisConfig) -> None:
-        self.cs = config.cs
+        if isinstance(config.cs, CryoSPARC):
+            self.cs = config.cs
+        elif isinstance(config.cs, str):
+            with open(Path(config.cs).expanduser(), "r") as f:
+                self.cs = CryoSPARC(**json.load(f))
+        else:
+            raise ValueError("Pass a CryoSPARC object or a path to a config JSON file.")
 
         self.figsize = config.figsize
 
@@ -28,14 +37,14 @@ class VisDataset:
 
         # micrographs
 
-        self._mic_uid = None
-        self.download_mic = config.download_mic
-        self._downsample_size = None
+        self._mic_uid:int|None = None
+        self.download_mic:bool = config.download_mic if config.download_mic is not None else True
+        self._downsample_size:int|None = None
         self.downsample_size = config.downsample_size
 
         self.crop_slice = config.crop_slice
 
-        self._base_mic_spec = (None, None)
+        self._base_mic_spec:tuple[None|str, None|str] = (None, None)
         self.base_mic = RawMicrograph(self, None)
         self.base_mic_results = None
         self.base_mic_spec = config.base_mic_spec if config.base_mic_spec is not None else (None, None)
@@ -60,6 +69,7 @@ class VisDataset:
 
         # particles
 
+        self.iteration:int|Literal["F"] = config.iteration if config.iteration is not None else "F"
         self._particles:Particles = Particles(self)
         self.particles_spec = config.particles_spec
 
