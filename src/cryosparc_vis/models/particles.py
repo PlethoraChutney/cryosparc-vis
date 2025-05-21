@@ -20,6 +20,7 @@ class Particles:
         self.function_masks:dict[str, "Callable[[Row], bool]"] = {}
         self.filter_by_mic = True
         self.filter_by_crop = True
+        self.allow_masked_assignment = False
 
         if spec[0] is None:
             self.job = None
@@ -80,7 +81,10 @@ class Particles:
         return self.particles[key]
     
     def __setitem__(self, key, value):
-        raise ValueError("Assigning to masked particles is not permitted")
+        if not self.allow_masked_assignment:
+            raise ValueError("You are attempting to assign to masked particles. If you mean to do this, set self.allow_masked_assignment to True")
+        else:
+            self.particles[key] = value
     
     def __delitem__(self, key):
         self.unmasked_particles.drop_fields(key)
