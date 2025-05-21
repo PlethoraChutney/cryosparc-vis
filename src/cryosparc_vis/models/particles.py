@@ -6,13 +6,10 @@ import matplotlib.pyplot as plt
 if TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.figure
-    from typing import Any
-    from numpy.typing import Floating
     from .vis_dataset import VisDataset
     from numpy.typing import NDArray
     from collections.abc import Callable
     from cryosparc.row import Row
-    from cryosparc.column import Column
 
 class Particles:
     def __init__(self, parent:"VisDataset") -> None:
@@ -80,12 +77,12 @@ class Particles:
     # plotting
 
     @property
-    def particles_x(self) -> "NDArray[Floating[Any]]":
+    def particles_x(self) -> "NDArray[np._FloatType]":
         crop_offset = (self.particles["location/center_x_frac"] - self.parent.crop_slice[0]) / self.parent.crop_slice[1]
         return crop_offset * self.parent.base_mic.shape[1]
     
     @property
-    def particles_y(self) -> "NDArray[Floating[Any]]":
+    def particles_y(self) -> "NDArray[np._FloatType]":
         crop_offset = (self.particles["location/center_y_frac"] - self.parent.crop_slice[2]) / self.parent.crop_slice[3]
         return crop_offset * self.parent.base_mic.shape[0]
     
@@ -128,9 +125,7 @@ class Particles:
             **defaults
         )
         if color_by is not None and legend:
-            ax.add_artist(
-                ax.legend(*scatter.legend_elements(), loc = "upper right", title = color_by)
-            )
+            fig.colorbar(scatter, ax = ax, location = "right") # type: ignore
         ax.set_aspect("equal")
         ax.axis("off")
         ax.margins(0)

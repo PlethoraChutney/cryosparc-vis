@@ -1,16 +1,8 @@
-import cryosparc
-from cryosparc.tools import CryoSPARC, lowpass2
-import cryosparc.mrc as cmrc
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 from .config import VisConfig
 from .micrograph import RawMicrograph, DenoisedMicrograph, JunkAnnotations
 from .particles import Particles
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    import cryosparc.dataset
+from typing import Any
 
 
 class VisDataset:
@@ -164,10 +156,6 @@ class VisDataset:
         self._mic_uid = int(muid)
 
         self.load_micrographs()
-        try:
-            self.particles.update_mic_uid_filter()
-        except AttributeError:
-            pass
         
 
     def select_mic_index(self, midx:str|int) -> int:
