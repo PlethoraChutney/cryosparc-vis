@@ -80,13 +80,13 @@ class MicrographBase:
         
         im = resize(im, self.shape, anti_aliasing = self.anti_alias_resize, order = 1 if self.anti_alias_resize else 0)
 
-        s = im.shape
+        ysize, xsize = im.shape
         xs, xe, ys, ye = self.parent.crop_slice
         c = [
-            int(ys * s[1]),
-            int(-1 + ye * s[1]),
-            int(xs * s[0]),
-            int(-1 + xe * s[0]),
+            int(ys * ysize),
+            int(-1 + ye * ysize),
+            int(xs * xsize),
+            int(-1 + xe * xsize),
         ]
         return im[c[0]:c[1], c[2]:c[3]]
     
@@ -105,6 +105,14 @@ class MicrographBase:
         aspect_ratio = np.array(s) / np.max(s)
         downsampled_shape = (np.array([self.parent.downsample_size]*2) * aspect_ratio).astype(int)
         return downsampled_shape
+    
+    @property
+    def cropped_shape(self) -> "NDArray":
+        s = self.shape
+        xs, xe, ys, ye = self.parent.crop_slice
+        xscale = xe - xs
+        yscale = ye - ys
+        return np.array([s[0] * yscale, s[1] * xscale])
     
     @property
     def scaling_factor(self) -> float:
