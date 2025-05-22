@@ -89,7 +89,7 @@ class VisDataset:
             downsample_size = self.downsample_size,
             crop_slice = None,
             download_mic = self.download_mic,
-            particles_spec = self.particles_spec
+            particles_spec = self.particles_spec,
         )
     
     def copy(self, updates:dict[str,Any] = {}) -> "VisDataset":
@@ -156,7 +156,7 @@ class VisDataset:
     
     @mic_uid.setter
     def mic_uid(self, muid:int|str|None) -> None:
-        if self.base_mic_results is None:
+        if self.base_mic_results is None and self.download_mic:
             raise AttributeError("Select a base micrograph job before setting the micrograph UID")
         if muid is None:
             self._mic_uid = None
