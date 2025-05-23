@@ -1,4 +1,5 @@
 import numpy as np
+from ..utils import vmin_vmax_percentile
 from skimage.transform import resize
 from cryosparc.tools import lowpass2
 import tempfile
@@ -142,9 +143,7 @@ class MicrographBase:
 
         im = self.image if lowpass is None else self.lp_image(lowpass)
         if percentile is not None:
-            p = np.percentile(im, [percentile, 100 - percentile])
-            kwargs["vmin"] = np.min(p)
-            kwargs["vmax"] = np.max(p)
+            kwargs["vmin"], kwargs["vmax"] = vmin_vmax_percentile(im, percentile)
 
         defaults = self.plot_defaults.copy()
         defaults.update(kwargs)

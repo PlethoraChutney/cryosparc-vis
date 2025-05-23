@@ -3,6 +3,8 @@ from cryosparc.tools import lowpass2
 from cryosparc.dataset import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
+from collections.abc import Iterable, Sequence
+from ..utils import vmin_vmax_percentile
 
 if TYPE_CHECKING:
     import matplotlib.axes
@@ -184,46 +186,56 @@ class Particles:
 
         return hdr, particle_image
     
-    plot_single_particle_defaults:dict[str, Any] = {
-        "cmap": "Grays_r",
+    single_particle_imshow_defaults:dict[str, Any] = {
+        "cmap": "Grays",
         "origin": "lower",
         "interpolation": "nearest"
     }
 
         
-    def plot_single_particle(
+    def single_particle_imshow(
             self,
+            img:Optional["np.ndarray[np.floating, np.dtype[np.floating]]"] = None,
+            hdr:Optional["Header"] = None,
             ax:Optional["matplotlib.axes.Axes"] = None,
             figsize:tuple[float, float] | Literal["pixel_perfect"] = (2, 2),
-            particle_uid:Optional[int] = None,
-            particle_index:Optional[int] = None,
-            index_from:Optional[Literal["unmasked", "masked"]] = "masked",
+            particle_selection:Optional[int] = None,
+            selection_type:Literal["uid", "unmasked_index", "masked_index"] = "uid",
             lowpass:Optional[float] = 20,
+            percentile:Optional[float] = None,
             **kwargs,
             ) -> tuple["matplotlib.figure.Figure | None", "matplotlib.axes.Axes"]:
 
-        if particle_uid is None:
-            if particle_index is None:
-                raise ValueError("Must specify a UID or a particle index")
-            if index_from == "masked":
-                particle_uid = self.particles["uid"][particle_index]
-            elif index_from == "unmasked":
-                particle_uid = self.unmasked_particles["uid"][particle_index]
-            else:
-                raise ValueError("Invalid value for index_from")
+        if any(x is None for x in (img, hdr)) and not all(x is None for x in (img, hdr)):
+            raise ValueError("Must provide either both or neither of img, hdr")
         
-        hdr, img = self.particle_image(particle_uid) # type: ignore idk why it can't figure out the block above
+        if img is None or hdr is None:
+            if particle_selection is None:
+                raise ValueError("Must provide img and hdr or a particle selection")
+            if selection_type == "uid":
+                hdr, img = self.particle_image(particle_selection)
+            elif selection_type == "masked_index":
+                hdr, img = self.particle_image(self.particles["uid"][particle_selection])
+            elif selection_type == "unmasked_index":
+                hdr, img = self.particle_image(self.unmasked_particles["uid"][particle_selection])
+            else:
+                raise ValueError("Invalid value for selection_type")
 
         if lowpass is not None:
             img = lowpass2(img, hdr.xlen / hdr.nx, lowpass)
 
-        defaults = self.plot_single_particle_defaults.copy()
+        defaults = self.single_particle_imshow_defaults.copy()
         defaults.update(**kwargs)
 
+        if percentile is not None:
+            vmin, vmax = vmin_vmax_percentile(img, percentile)
+            defaults["vmin"] = vmin
+            defaults["vmax"] = vmax
 
         if ax is None:
+            dpi = plt.rcParams["figure.dpi"]
             if figsize == "pixel_perfect":
-                figsize = (img.shape[1] / 100, img.shape[0] / 100)
+                figsize = (img.shape[1] / dpi, img.shape[0] / dpi)
             fig, ax = plt.subplots(1, 1, figsize = figsize, frameon = False, layout = "constrained")
         else:
             fig = ax.get_figure()
@@ -236,3 +248,120 @@ class Particles:
         ax.set_aspect("equal")
 
         return fig, ax
+    
+    def multiple_particle_imshow(
+            self,
+            images:Sequence[int]|int = 6,
+            image_selection:Optional[Literal["uid", "index", "number_of_random", "number_in_order"]] = None,
+            axs:Optional[np.ndarray["matplotlib.axes.Axes", np.dtype[np.object_]]] = None,
+            im_layout:Optional[tuple[int, int]] = None,
+            imsize:Optional[float] = 2.0,
+            figsize:Optional[tuple[float, float]] = None,
+            cmap_range:None|float|Iterable[float]|Sequence[Iterable[float]] = 0.01,
+            percentile_per_class:Literal["overall", "per_class"] = "overall",
+            lowpass:None|float = 20.0,
+            **kwargs
+    ) -> tuple["matplotlib.figure.Figure", "np.ndarray[matplotlib.axes.Axes, np.dtype[np.object_]]"]:
+        
+        if image_selection is None:
+            if isinstance(images, int):
+                image_selection = "number_in_order"
+            elif isinstance(images, Sequence):
+                image_selection = "uid"
+        
+        if image_selection == "uid":
+            plot_p = self.particles.query({"uid": image_selection})
+        elif image_selection == "index":
+            if isinstance(images, int):
+                images = [images]
+            plot_p = self.particles.take(images) # type: ignore - cs-tools requires specifically a list
+        elif image_selection == "number_of_random":
+            if isinstance(images, int):
+                plot_p = self.particles.take(np.random.default_rng().choice(len(self.particles), images, replace = False))
+            else:
+                raise ValueError("Provide a single int if selecting a number of particles")
+        elif image_selection == "number_in_order":
+            if isinstance(images, int):
+                plot_p = self.particles.take(list(range(images)))
+            else:
+                raise ValueError("Provide a single int if selecting a number of particles")
+        else:
+            raise ValueError("Invalid image_selection option")
+        
+        plot_imgs = []
+        plot_hdrs = []
+        for im in plot_p.rows():
+            hdr, img = self.particle_image(im["uid"])
+            if lowpass is not None:
+                img = lowpass2(img, hdr.xlen / hdr.nx, lowpass)
+            plot_imgs.append(img)
+            plot_hdrs.append(hdr)
+
+        if percentile_per_class == "overall" and not isinstance(cmap_range, Iterable) and cmap_range is not None:
+            all_pixels = np.dstack(plot_imgs)
+            vmin, vmax = vmin_vmax_percentile(all_pixels, cmap_range) # type: ignore
+        elif isinstance(cmap_range, Sequence) and not isinstance(cmap_range[0], Iterable):
+            vmin = cmap_range[0]
+            vmax = cmap_range[1]
+        else:
+            vmin = None
+            vmax = None
+
+        if axs is None:
+            if im_layout is None:
+                xims = int(np.ceil(np.sqrt(len(plot_p))))
+                yims = len(plot_p) // xims
+            else:
+                xims, yims = im_layout
+            while xims * yims < len(plot_p):
+                yims += 1
+
+            if figsize is None:
+                if imsize is not None:
+                    figsize = (imsize * xims, imsize * yims)
+                else:
+                    figsize = self.parent.figsize
+
+            fig, axs = plt.subplots(
+                yims,
+                xims,
+                frameon = False,
+                figsize = figsize,
+                layout = "constrained",
+                squeeze = False
+            )
+        else:
+            fig = axs[0].get_figure()
+
+        defaults = self.single_particle_imshow_defaults.copy()
+        for i, ax in enumerate(axs.flatten()):
+            try:
+                img = plot_imgs[i]
+                hdr = plot_hdrs[i]
+            except IndexError:
+                ax.axis("off")
+                continue
+            
+            defaults.update(**kwargs)
+
+            if not isinstance(cmap_range, Iterable) and cmap_range is not None and percentile_per_class == "per_class":
+                defaults["percentile"] = cmap_range
+            elif isinstance(cmap_range, Sequence) and isinstance(cmap_range[0], Sequence):
+                defaults["percentile"] = None
+                vmin = cmap_range[i][0] # type: ignore
+                vmax = cmap_range[i][1] # type: ignore
+                defaults["vmin"] = vmin
+                defaults["vmax"] = vmax
+            else:
+                defaults["vmin"] = vmin
+                defaults["vmax"] = vmax
+
+            self.single_particle_imshow(
+                img,
+                hdr,
+                ax,
+                lowpass = None,
+                **defaults
+            )
+
+        return fig, axs
