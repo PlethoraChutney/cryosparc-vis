@@ -3,7 +3,7 @@ from cryosparc.tools import lowpass2
 from cryosparc.dataset import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Sequence, Callable
 from ..utils import vmin_vmax_percentile
 
 if TYPE_CHECKING:
@@ -11,21 +11,32 @@ if TYPE_CHECKING:
     import matplotlib.figure
     from .vis_dataset import VisDataset
     from numpy.typing import NDArray, ArrayLike
-    from collections.abc import Callable
     from cryosparc.row import Row
     from cryosparc.mrc import Header
 
 class Particles:
+    def default_mic_filter(self, dset):
+        return dset["location/micrograph_uid"] == self.parent.mic_uid
+    
+    def default_crop_filter(self, dset):
+        return np.all([
+            dset["location/center_x_frac"] >= self.parent.crop_slice[0],
+            dset["location/center_x_frac"] < self.parent.crop_slice[1],
+            dset["location/center_y_frac"] >= self.parent.crop_slice[2],
+            dset["location/center_y_frac"] < self.parent.crop_slice[3],
+        ], axis = 0)
+
     def __init__(self, parent:"VisDataset") -> None:
         self.parent = parent
         spec = self.parent.particles_spec
         self._particles:"Dataset|None"
         self._particle_mrcs:"dict[str, tuple[Header, NDArray[np.floating]]]" = {}
         self._particle_images:"dict[int, tuple[Header, NDArray[np.floating]]]" = {}
-        self.bool_masks:dict[str, "NDArray[np.bool_]"] = {}
-        self.function_masks:dict[str, "Callable[[Row], bool]"] = {}
-        self.filter_by_mic = True
-        self.filter_by_crop = True
+        self.bool_masks:dict[str, "NDArray[np.bool_] | Callable[[Dataset], NDArray[np.bool_]]"] = {
+            "in_micrograph": self.default_mic_filter,
+            "in_crop": self.default_crop_filter,
+        }
+        self.query_function_masks:dict[str, "Callable[[Row], bool]"] = {}
         self.allow_masked_assignment = False
 
         if spec[0] is None:
@@ -35,9 +46,21 @@ class Particles:
             self.job = self.parent.project.find_job(spec[0])
             self.particles = self.job.load_output("particles" if spec[1] is None else spec[1], version = self.parent.iteration)
 
+    @property
+    def mask_names(self) -> list[str]:
+        names = []
+        names.extend(list(self.bool_masks.keys()))
+        names.extend(list(self.query_function_masks.keys()))
+        return names
+
     def remove_mask(self, mask_name:str) -> None:
         if mask_name in self.bool_masks:
+            is_fn = isinstance(self.bool_masks[mask_name], Callable)
             del self.bool_masks[mask_name]
+            print(f"Deleted boolean mask{' generator function' if is_fn else ''} {mask_name}")
+        elif mask_name in self.query_function_masks:
+            del self.query_function_masks[mask_name]
+            print(f"Deleted query mask {mask_name}")
         else:
             print(f"{mask_name} not found")
 
@@ -49,21 +72,19 @@ class Particles:
 
     @property
     def bool_mask(self) -> "NDArray[np.bool_]":
-        masks = list(self.bool_masks.values())
-        if self.filter_by_mic:
-            masks.append(self.unmasked_particles["location/micrograph_uid"] == self.parent.mic_uid)
-        if self.filter_by_crop:
-            masks.append(self.unmasked_particles["location/center_x_frac"] >= self.parent.crop_slice[0])
-            masks.append(self.unmasked_particles["location/center_x_frac"] < self.parent.crop_slice[1])
-            masks.append(self.unmasked_particles["location/center_y_frac"] >= self.parent.crop_slice[2])
-            masks.append(self.unmasked_particles["location/center_y_frac"] < self.parent.crop_slice[3])
+        masks = []
+        for mask in self.bool_masks.values():
+            if isinstance(mask, np.ndarray):
+                masks.append(mask)
+            elif isinstance(mask, Callable):
+                masks.append(mask(self.unmasked_particles))
 
         return np.all(masks, axis = 0)
 
     @property
     def particles(self) -> "Dataset":
         p = self.unmasked_particles.mask(self.bool_mask)
-        for f_mask in self.function_masks.values():
+        for f_mask in self.query_function_masks.values():
             p = p.query(f_mask)
 
         return p
